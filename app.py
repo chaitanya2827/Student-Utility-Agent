@@ -36,6 +36,7 @@ def calculate_cgpa(grades: str) -> str:
     """Calculate CGPA from comma-separated grade points."""
 
     try:
+
         values = [
             float(x.strip())
             for x in grades.split(",")
@@ -50,11 +51,18 @@ def calculate_cgpa(grades: str) -> str:
         return f"CGPA = {cgpa:.2f}"
 
     except ValueError:
-        return "Please provide grade points like: 8.5, 9, 7.5, 8"
+
+        return (
+            "Please provide grade points like: "
+            "8.5, 9, 7.5, 8"
+        )
 
 
 @tool
-def calculate_attendance(attended: float, total: float) -> str:
+def calculate_attendance(
+    attended: float,
+    total: float
+) -> str:
     """Calculate attendance percentage."""
 
     if total <= 0:
@@ -77,34 +85,57 @@ def unit_converter(
     to_unit = to_unit.lower().strip()
 
     conversions = {
-        ("km", "miles"): value * 0.621371,
-        ("miles", "km"): value * 1.60934,
 
-        ("kg", "pounds"): value * 2.20462,
-        ("pounds", "kg"): value * 0.453592,
+        ("km", "miles"):
+            value * 0.621371,
 
-        ("meters", "feet"): value * 3.28084,
-        ("feet", "meters"): value * 0.3048,
+        ("miles", "km"):
+            value * 1.60934,
 
-        ("m", "ft"): value * 3.28084,
-        ("ft", "m"): value * 0.3048,
+        ("kg", "pounds"):
+            value * 2.20462,
 
-        ("cm", "inches"): value * 0.393701,
-        ("inches", "cm"): value * 2.54,
+        ("pounds", "kg"):
+            value * 0.453592,
 
-        ("kg", "g"): value * 1000,
-        ("g", "kg"): value / 1000,
+        ("meters", "feet"):
+            value * 3.28084,
 
-        ("liters", "ml"): value * 1000,
-        ("ml", "liters"): value / 1000,
+        ("feet", "meters"):
+            value * 0.3048,
+
+        ("m", "ft"):
+            value * 3.28084,
+
+        ("ft", "m"):
+            value * 0.3048,
+
+        ("cm", "inches"):
+            value * 0.393701,
+
+        ("inches", "cm"):
+            value * 2.54,
+
+        ("kg", "g"):
+            value * 1000,
+
+        ("g", "kg"):
+            value / 1000,
+
+        ("liters", "ml"):
+            value * 1000,
+
+        ("ml", "liters"):
+            value / 1000
     }
 
     key = (from_unit, to_unit)
 
     if key not in conversions:
+
         return (
-            f"Conversion from {from_unit} to {to_unit} "
-            f"is not supported."
+            f"Conversion from {from_unit} "
+            f"to {to_unit} is not supported."
         )
 
     result = conversions[key]
@@ -116,7 +147,7 @@ def unit_converter(
 
 
 # ============================================================
-# 2. TOOL LIST
+# 2. TOOLS
 # ============================================================
 
 tools = [
@@ -139,20 +170,27 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 # ============================================================
 
 llm = ChatGoogleGenerativeAI(
+
     model="gemini-3.1-flash-lite-preview",
+
     google_api_key=GEMINI_API_KEY,
+
     temperature=0
 )
 
 
 # ============================================================
-# 5. CREATE AGENT
+# 5. STUDENT UTILITY AGENT
 # ============================================================
 
 student_agent = create_agent(
+
     model=llm,
+
     tools=tools,
+
     system_prompt="""
+
 You are a Student Utility Agent.
 
 You help students with:
@@ -162,29 +200,38 @@ You help students with:
 3. Attendance calculations
 4. Unit conversions
 
-Always use the appropriate tool whenever a
-calculation is required.
+Always use the appropriate tool whenever
+a calculation is required.
 
 For percentage:
+
 Use obtained marks and total marks.
 
 For attendance:
+
 Use attended classes and total classes.
 
 For CGPA:
-Calculate the average of the provided grade
-points unless the user specifies another method.
+
+Calculate the average of the provided
+grade points unless the user specifies
+another grading method.
 
 For unit conversion:
-Identify the units and use the unit conversion tool.
 
-Give simple and clear answers suitable for students.
+Identify the units and use the
+unit conversion tool.
 
-If the question is unrelated to student utility
-tasks, politely explain that you are specialized
-in student utility calculations.
+Give simple and clear answers suitable
+for students.
+
+If the question is unrelated to these
+student utility tasks, politely explain
+that you are specialized in student
+utility calculations.
 
 Do not invent calculation results.
+
 """
 )
 
@@ -194,13 +241,14 @@ Do not invent calculation results.
 # ============================================================
 
 class AgentInput(BaseModel):
+
     input: str = Field(
         description="Your message to the agent"
     )
 
 
 # ============================================================
-# 7. FORMAT INPUT FOR LANGSERVE
+# 7. FORMAT INPUT
 # ============================================================
 
 def format_for_agent(x):
@@ -212,39 +260,98 @@ def format_for_agent(x):
     )
 
     return {
+
         "messages": [
             ("user", user_input)
         ]
+
     }
 
 
 # ============================================================
-# 8. EXTRACT AGENT RESPONSE
+# 8. EXTRACT CLEAN TEXT RESPONSE
 # ============================================================
 
 def extract_text_response(agent_output):
 
     if not isinstance(agent_output, dict):
+
         return str(agent_output)
+
 
     messages = agent_output.get("messages")
 
-    if messages:
 
-        last = messages[-1]
+    if not messages:
 
-        content = getattr(
-            last,
-            "content",
-            None
-        )
+        return str(agent_output)
 
-        if content is not None:
-            return str(content)
 
-        return str(last)
+    last = messages[-1]
 
-    return str(agent_output)
+
+    content = getattr(
+        last,
+        "content",
+        ""
+    )
+
+
+    # --------------------------------------------------------
+    # Gemini can return content as a list
+    # --------------------------------------------------------
+
+    if isinstance(content, list):
+
+        text_parts = []
+
+
+        for block in content:
+
+            # Dictionary content block
+
+            if isinstance(block, dict):
+
+                if block.get("type") == "text":
+
+                    text = block.get(
+                        "text",
+                        ""
+                    )
+
+                    if text:
+
+                        text_parts.append(
+                            str(text)
+                        )
+
+
+            # String content block
+
+            elif isinstance(block, str):
+
+                text_parts.append(
+                    block
+                )
+
+
+        if text_parts:
+
+            return "".join(
+                text_parts
+            ).strip()
+
+
+    # --------------------------------------------------------
+    # Normal string response
+    # --------------------------------------------------------
+
+    if isinstance(content, str):
+
+        return content.strip()
+
+
+    return str(content)
 
 
 # ============================================================
@@ -252,39 +359,54 @@ def extract_text_response(agent_output):
 # ============================================================
 
 formatted_agent_chain = (
-    RunnableLambda(format_for_agent)
+
+    RunnableLambda(
+        format_for_agent
+    )
+
     | student_agent
-    | RunnableLambda(extract_text_response)
+
+    | RunnableLambda(
+        extract_text_response
+    )
+
 ).with_types(
+
     input_type=AgentInput,
+
     output_type=str
+
 )
 
 
 # ============================================================
-# 10. FASTAPI APP
+# 10. FASTAPI APPLICATION
 # ============================================================
 
 app = FastAPI(
+
     title="Student Utility Agent",
+
     description=(
-        "AI-powered Student Utility Agent for "
-        "percentage, CGPA, attendance and "
-        "unit conversion."
+        "AI-powered Student Utility Agent "
+        "for percentage, CGPA, attendance "
+        "and unit conversion."
     )
+
 )
 
 
 # ============================================================
-# 11. WEB CHAT REQUEST MODEL
+# 11. CHAT REQUEST MODEL
 # ============================================================
 
 class ChatRequest(BaseModel):
+
     message: str
 
 
 # ============================================================
-# 12. WEB CHAT API
+# 12. CHAT API
 # ============================================================
 
 @app.post("/chat")
@@ -293,21 +415,38 @@ def chat(request: ChatRequest):
     try:
 
         result = student_agent.invoke({
+
             "messages": [
-                ("user", request.message)
+
+                (
+                    "user",
+                    request.message
+                )
+
             ]
+
         })
 
-        answer = extract_text_response(result)
+
+        answer = extract_text_response(
+            result
+        )
+
 
         return {
+
             "response": answer
+
         }
+
 
     except Exception as e:
 
         return {
-            "response": f"Error: {str(e)}"
+
+            "response":
+                f"Error: {str(e)}"
+
         }
 
 
@@ -322,385 +461,419 @@ def chat(request: ChatRequest):
 def home():
 
     return """
+
 <!DOCTYPE html>
 
 <html>
 
 <head>
 
-    <meta charset="UTF-8">
+<meta charset="UTF-8">
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
 
-    <title>
-        Student Utility Agent
-    </title>
+<title>
+Student Utility Agent
+</title>
 
 
-    <style>
+<style>
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+/* ==========================================================
+   RESET
+   ========================================================== */
 
+* {
 
-        body {
+    box-sizing: border-box;
 
-            font-family:
-                Arial,
-                Helvetica,
-                sans-serif;
+    margin: 0;
 
-            min-height: 100vh;
+    padding: 0;
 
-            background:
-                linear-gradient(
-                    135deg,
-                    #eef2ff,
-                    #f8fafc
-                );
+}
 
-            display: flex;
 
-            justify-content: center;
+/* ==========================================================
+   BODY
+   ========================================================== */
 
-            align-items: center;
+body {
 
-            padding: 20px;
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
 
-        }
+    min-height: 100vh;
 
+    background:
+        linear-gradient(
+            135deg,
+            #eef2ff,
+            #f8fafc
+        );
 
-        .container {
+    display: flex;
 
-            width: 100%;
+    justify-content: center;
 
-            max-width: 850px;
+    align-items: center;
 
-            background: white;
+    padding: 20px;
 
-            border-radius: 22px;
+}
 
-            overflow: hidden;
 
-            box-shadow:
-                0 12px 45px
-                rgba(0, 0, 0, 0.12);
+/* ==========================================================
+   MAIN CONTAINER
+   ========================================================== */
 
-        }
+.container {
 
+    width: 100%;
 
-        /* HEADER */
+    max-width: 850px;
 
-        .header {
+    background: white;
 
-            background:
-                linear-gradient(
-                    135deg,
-                    #2563eb,
-                    #4f46e5
-                );
+    border-radius: 22px;
 
-            color: white;
+    overflow: hidden;
 
-            padding: 32px 25px;
+    box-shadow:
+        0 12px 45px
+        rgba(0, 0, 0, 0.12);
 
-            text-align: center;
+}
 
-        }
 
+/* ==========================================================
+   HEADER
+   ========================================================== */
 
-        .header h1 {
+.header {
 
-            font-size: 30px;
+    background:
+        linear-gradient(
+            135deg,
+            #2563eb,
+            #4f46e5
+        );
 
-            margin-bottom: 8px;
+    color: white;
 
-        }
+    padding: 32px 25px;
 
+    text-align: center;
 
-        .header p {
+}
 
-            font-size: 15px;
 
-            opacity: 0.92;
+.header h1 {
 
-        }
+    font-size: 30px;
 
+    margin-bottom: 8px;
 
-        /* FEATURES */
+}
 
-        .features {
 
-            display: flex;
+.header p {
 
-            justify-content: center;
+    font-size: 15px;
 
-            align-items: center;
+    opacity: 0.92;
 
-            flex-wrap: wrap;
+}
 
-            gap: 10px;
 
-            padding: 18px;
+/* ==========================================================
+   FEATURES
+   ========================================================== */
 
-            border-bottom:
-                1px solid #e5e7eb;
+.features {
 
-        }
+    display: flex;
 
+    justify-content: center;
 
-        .feature {
+    align-items: center;
 
-            padding:
-                8px 14px;
+    flex-wrap: wrap;
 
-            background: #eef2ff;
+    gap: 10px;
 
-            color: #3730a3;
+    padding: 18px;
 
-            border-radius: 20px;
+    border-bottom:
+        1px solid #e5e7eb;
 
-            font-size: 13px;
+}
 
-            font-weight: 600;
 
-        }
+.feature {
 
+    padding:
+        8px 14px;
 
-        /* CHAT AREA */
+    background: #eef2ff;
 
-        .chat {
+    color: #3730a3;
 
-            height: 420px;
+    border-radius: 20px;
 
-            overflow-y: auto;
+    font-size: 13px;
 
-            padding: 22px;
+    font-weight: 600;
 
-            background: #ffffff;
+}
 
-        }
 
+/* ==========================================================
+   CHAT
+   ========================================================== */
 
-        .message {
+.chat {
 
-            max-width: 80%;
+    height: 420px;
 
-            padding:
-                14px 17px;
+    overflow-y: auto;
 
-            margin-bottom: 16px;
+    padding: 22px;
 
-            border-radius: 15px;
+    background: white;
 
-            line-height: 1.55;
+}
 
-            font-size: 15px;
 
-            white-space: pre-wrap;
+.message {
 
-        }
+    max-width: 80%;
 
+    padding:
+        14px 17px;
 
-        .bot {
+    margin-bottom: 16px;
 
-            background: #f1f5f9;
+    border-radius: 15px;
 
-            color: #111827;
+    line-height: 1.55;
 
-            margin-right: auto;
+    font-size: 15px;
 
-        }
+    white-space: pre-wrap;
 
+    word-wrap: break-word;
 
-        .user {
+}
 
-            background: #2563eb;
 
-            color: white;
+.bot {
 
-            margin-left: auto;
+    background: #f1f5f9;
 
-        }
+    color: #111827;
 
+    margin-right: auto;
 
-        /* INPUT AREA */
+}
 
-        .input-area {
 
-            display: flex;
+.user {
 
-            gap: 10px;
+    background: #2563eb;
 
-            padding: 16px;
+    color: white;
 
-            border-top:
-                1px solid #e5e7eb;
+    margin-left: auto;
 
-        }
+}
 
 
-        #message {
+/* ==========================================================
+   INPUT
+   ========================================================== */
 
-            flex: 1;
+.input-area {
 
-            padding:
-                14px 16px;
+    display: flex;
 
-            border:
-                1px solid #d1d5db;
+    gap: 10px;
 
-            border-radius: 12px;
+    padding: 16px;
 
-            outline: none;
+    border-top:
+        1px solid #e5e7eb;
 
-            font-size: 15px;
+}
 
-        }
 
+#message {
 
-        #message:focus {
+    flex: 1;
 
-            border-color: #2563eb;
+    padding:
+        14px 16px;
 
-            box-shadow:
-                0 0 0 3px
-                rgba(37, 99, 235, 0.1);
+    border:
+        1px solid #d1d5db;
 
-        }
+    border-radius: 12px;
 
+    outline: none;
 
-        #send {
+    font-size: 15px;
 
-            padding:
-                14px 25px;
+}
 
-            background: #2563eb;
 
-            color: white;
+#message:focus {
 
-            border: none;
+    border-color: #2563eb;
 
-            border-radius: 12px;
+    box-shadow:
+        0 0 0 3px
+        rgba(37, 99, 235, 0.1);
 
-            cursor: pointer;
+}
 
-            font-size: 15px;
 
-            font-weight: bold;
+#send {
 
-        }
+    padding:
+        14px 25px;
 
+    background: #2563eb;
 
-        #send:hover {
+    color: white;
 
-            background: #1d4ed8;
+    border: none;
 
-        }
+    border-radius: 12px;
 
+    cursor: pointer;
 
-        #send:disabled {
+    font-size: 15px;
 
-            background: #94a3b8;
+    font-weight: bold;
 
-            cursor: not-allowed;
+}
 
-        }
 
+#send:hover {
 
-        /* EXAMPLE */
+    background: #1d4ed8;
 
-        .examples {
+}
 
-            padding:
-                0 18px 20px;
 
-            color: #64748b;
+#send:disabled {
 
-            font-size: 13px;
+    background: #94a3b8;
 
-        }
+    cursor: not-allowed;
 
+}
 
-        /* STATUS */
 
-        .status {
+/* ==========================================================
+   EXAMPLES
+   ========================================================== */
 
-            text-align: center;
+.examples {
 
-            padding-bottom: 15px;
+    padding:
+        0 18px 15px;
 
-            color: #94a3b8;
+    color: #64748b;
 
-            font-size: 12px;
+    font-size: 13px;
 
-        }
+}
 
 
-        /* MOBILE */
+/* ==========================================================
+   FOOTER
+   ========================================================== */
 
-        @media (max-width: 600px) {
+.status {
 
-            body {
+    text-align: center;
 
-                padding: 10px;
+    padding:
+        0 15px 18px;
 
-            }
+    color: #94a3b8;
 
+    font-size: 12px;
 
-            .header {
+}
 
-                padding: 25px 15px;
 
-            }
+/* ==========================================================
+   MOBILE
+   ========================================================== */
 
+@media (max-width: 600px) {
 
-            .header h1 {
+    body {
 
-                font-size: 24px;
+        padding: 10px;
 
-            }
+    }
 
 
-            .chat {
+    .header {
 
-                height: 380px;
+        padding: 25px 15px;
 
-                padding: 15px;
+    }
 
-            }
 
+    .header h1 {
 
-            .message {
+        font-size: 24px;
 
-                max-width: 90%;
+    }
 
-            }
 
+    .chat {
 
-            .input-area {
+        height: 380px;
 
-                padding: 12px;
+        padding: 15px;
 
-            }
+    }
 
 
-            #send {
+    .message {
 
-                padding:
-                    14px 18px;
+        max-width: 90%;
 
-            }
+    }
 
-        }
 
-    </style>
+    .input-area {
+
+        padding: 12px;
+
+    }
+
+
+    #send {
+
+        padding:
+            14px 18px;
+
+    }
+
+}
+
+</style>
 
 </head>
 
@@ -711,53 +884,61 @@ def home():
 <div class="container">
 
 
-    <!-- HEADER -->
+<!-- ========================================================
+     HEADER
+     ======================================================== -->
 
-    <div class="header">
+<div class="header">
 
-        <h1>
-            🎓 Student Utility Agent
-        </h1>
+    <h1>
+        🎓 Student Utility Agent
+    </h1>
 
-        <p>
-            Your AI assistant for everyday
-            student calculations
-        </p>
+    <p>
+        Your AI assistant for everyday
+        student calculations
+    </p>
 
-    </div>
-
-
-    <!-- FEATURES -->
-
-    <div class="features">
-
-        <span class="feature">
-            📊 Percentage
-        </span>
-
-        <span class="feature">
-            🎯 CGPA
-        </span>
-
-        <span class="feature">
-            📅 Attendance
-        </span>
-
-        <span class="feature">
-            📏 Unit Conversion
-        </span>
-
-    </div>
+</div>
 
 
-    <!-- CHAT -->
+<!-- ========================================================
+     FEATURES
+     ======================================================== -->
+
+<div class="features">
+
+    <span class="feature">
+        📊 Percentage
+    </span>
+
+    <span class="feature">
+        🎯 CGPA
+    </span>
+
+    <span class="feature">
+        📅 Attendance
+    </span>
+
+    <span class="feature">
+        📏 Unit Conversion
+    </span>
+
+</div>
+
+
+<!-- ========================================================
+     CHAT
+     ======================================================== -->
+
+<div
+    class="chat"
+    id="chat"
+>
 
     <div
-        class="chat"
-        id="chat"
+        class="message bot"
     >
-
-        <div class="message bot">
 
 👋 Hi! I'm your Student Utility Agent.
 
@@ -773,48 +954,65 @@ Try asking:
 "I scored 435 out of 500.
 What is my percentage?"
 
-        </div>
-
     </div>
 
-
-    <!-- INPUT -->
-
-    <div class="input-area">
-
-        <input
-            type="text"
-            id="message"
-            placeholder="Ask your question..."
-            autocomplete="off"
-        >
-
-        <button
-            id="send"
-            onclick="sendMessage()"
-        >
-            Send
-        </button>
-
-    </div>
+</div>
 
 
-    <!-- EXAMPLE -->
+<!-- ========================================================
+     INPUT
+     ======================================================== -->
 
-    <div class="examples">
+<div class="input-area">
 
-        Try:
-        "My attendance is 42 out of 50.
-        What is my attendance percentage?"
+    <input
 
-    </div>
+        type="text"
+
+        id="message"
+
+        placeholder="Ask your question..."
+
+        autocomplete="off"
+
+    >
 
 
-    <div class="status">
+    <button
+        id="send"
+        onclick="sendMessage()"
+    >
 
-        Powered by Gemini + LangChain
+        Send
 
-    </div>
+    </button>
+
+</div>
+
+
+<!-- ========================================================
+     EXAMPLE
+     ======================================================== -->
+
+<div class="examples">
+
+    Try:
+
+    "My attendance is 42 out of 50.
+    What is my attendance percentage?"
+
+</div>
+
+
+<!-- ========================================================
+     FOOTER
+     ======================================================== -->
+
+<div class="status">
+
+    Powered by Gemini + LangChain
+
+</div>
 
 
 </div>
@@ -860,7 +1058,7 @@ async function sendMessage() {
 
 
     // ========================================================
-    // SHOW USER MESSAGE
+    // USER MESSAGE
     // ========================================================
 
     const userMessage =
@@ -886,7 +1084,7 @@ async function sendMessage() {
 
 
     // ========================================================
-    // DISABLE BUTTON
+    // DISABLE SEND BUTTON
     // ========================================================
 
     button.disabled = true;
@@ -896,7 +1094,7 @@ async function sendMessage() {
 
 
     // ========================================================
-    // LOADING MESSAGE
+    // LOADING
     // ========================================================
 
     const loading =
@@ -962,7 +1160,7 @@ async function sendMessage() {
 
 
         // ====================================================
-        // CREATE BOT RESPONSE
+        // BOT RESPONSE
         // ====================================================
 
         const botMessage =
@@ -1038,7 +1236,7 @@ async function sendMessage() {
 
 
     // ========================================================
-    // ENABLE BUTTON
+    // ENABLE SEND BUTTON
     // ========================================================
 
     button.disabled = false;
@@ -1081,11 +1279,12 @@ document
 </body>
 
 </html>
+
 """
 
 
 # ============================================================
-# 14. LANGSERVE API ROUTES
+# 14. LANGSERVE ROUTES
 # ============================================================
 
 add_routes(
