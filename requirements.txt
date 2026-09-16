@@ -3,3 +3,4 @@ uvicorn
 langserve
 langchain-core
 langchain-google-genai
+langchain
