@@ -6,16 +6,17 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
 from langserve import add_routes
+
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableLambda
-from langchain_google_generative_ai import ChatGoogleGenerativeAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import create_agent
 
 from pydantic import BaseModel, Field
 
 
 # ============================================================
-# 1. PERCENTAGE
+# 1. PERCENTAGE TOOL
 # ============================================================
 
 @tool
@@ -31,7 +32,7 @@ def calculate_percentage(marks: float, total: float) -> str:
 
 
 # ============================================================
-# 2. CGPA
+# 2. CGPA TOOL
 # ============================================================
 
 @tool
@@ -39,7 +40,6 @@ def calculate_cgpa(grades: str) -> str:
     """Calculate average CGPA from comma-separated grade points."""
 
     try:
-
         values = [
             float(x.strip())
             for x in grades.split(",")
@@ -54,22 +54,15 @@ def calculate_cgpa(grades: str) -> str:
         return f"Your CGPA is {cgpa:.2f}."
 
     except ValueError:
-
-        return (
-            "Please provide grade points like "
-            "8.5, 9, 7.5, 8."
-        )
+        return "Please provide grade points like 8.5, 9, 7.5, 8."
 
 
 # ============================================================
-# 3. ATTENDANCE
+# 3. ATTENDANCE TOOL
 # ============================================================
 
 @tool
-def calculate_attendance(
-    attended: float,
-    total: float
-) -> str:
+def calculate_attendance(attended: float, total: float) -> str:
     """Calculate attendance percentage."""
 
     if total <= 0:
@@ -90,13 +83,13 @@ def unit_converter(
     from_unit: str,
     to_unit: str
 ) -> str:
-    """Convert common units."""
+    """Convert common length, weight, volume, temperature,
+    time, speed, area and digital storage units."""
 
     from_unit = from_unit.lower().strip()
     to_unit = to_unit.lower().strip()
 
     aliases = {
-
         # LENGTH
         "millimeter": "mm",
         "millimeters": "mm",
@@ -165,17 +158,21 @@ def unit_converter(
         "centigrade": "c",
         "degree celsius": "c",
         "degrees celsius": "c",
+        "°c": "c",
 
         "fahrenheit": "f",
         "degree fahrenheit": "f",
         "degrees fahrenheit": "f",
+        "°f": "f",
 
         "kelvin": "k",
+        "kelvins": "k",
 
         # TIME
         "second": "s",
         "seconds": "s",
         "sec": "s",
+        "secs": "s",
 
         "minute": "min",
         "minutes": "min",
@@ -190,26 +187,31 @@ def unit_converter(
         "days": "day",
 
         # SPEED
-        "meters per second": "m/s",
         "meter per second": "m/s",
+        "meters per second": "m/s",
 
-        "kilometers per hour": "km/h",
         "kilometer per hour": "km/h",
+        "kilometers per hour": "km/h",
         "km per hour": "km/h",
         "kmph": "km/h",
         "kph": "km/h",
+        "km/hr": "km/h",
 
-        "miles per hour": "mph",
         "mile per hour": "mph",
+        "miles per hour": "mph",
 
         # AREA
         "square meter": "m2",
         "square meters": "m2",
         "square metre": "m2",
         "square metres": "m2",
+        "sq meter": "m2",
+        "sq meters": "m2",
 
         "square kilometer": "km2",
         "square kilometers": "km2",
+        "square kilometre": "km2",
+        "square kilometres": "km2",
 
         "square foot": "ft2",
         "square feet": "ft2",
@@ -245,50 +247,34 @@ def unit_converter(
     # --------------------------------------------------------
 
     if from_unit == to_unit:
-
-        return (
-            f"{value:g} {from_unit} = "
-            f"{value:g} {to_unit}"
-        )
+        return f"{value:g} {from_unit} = {value:g} {to_unit}"
 
     # --------------------------------------------------------
     # TEMPERATURE
     # --------------------------------------------------------
 
     if from_unit == "c" and to_unit == "f":
-
         result = (value * 9 / 5) + 32
-
         return f"{value:g}°C = {result:.2f}°F"
 
     if from_unit == "f" and to_unit == "c":
-
         result = (value - 32) * 5 / 9
-
         return f"{value:g}°F = {result:.2f}°C"
 
     if from_unit == "c" and to_unit == "k":
-
         result = value + 273.15
-
         return f"{value:g}°C = {result:.2f} K"
 
     if from_unit == "k" and to_unit == "c":
-
         result = value - 273.15
-
         return f"{value:g} K = {result:.2f}°C"
 
     if from_unit == "f" and to_unit == "k":
-
         result = ((value - 32) * 5 / 9) + 273.15
-
         return f"{value:g}°F = {result:.2f} K"
 
     if from_unit == "k" and to_unit == "f":
-
         result = ((value - 273.15) * 9 / 5) + 32
-
         return f"{value:g} K = {result:.2f}°F"
 
     # --------------------------------------------------------
@@ -306,19 +292,11 @@ def unit_converter(
         "mi": 1609.344
     }
 
-    if (
-        from_unit in length_to_meter
-        and to_unit in length_to_meter
-    ):
-
+    if from_unit in length_to_meter and to_unit in length_to_meter:
         meters = value * length_to_meter[from_unit]
-
         result = meters / length_to_meter[to_unit]
 
-        return (
-            f"{value:g} {from_unit} = "
-            f"{result:.4f} {to_unit}"
-        )
+        return f"{value:g} {from_unit} = {result:.4f} {to_unit}"
 
     # --------------------------------------------------------
     # WEIGHT
@@ -332,19 +310,11 @@ def unit_converter(
         "lb": 0.45359237
     }
 
-    if (
-        from_unit in weight_to_kg
-        and to_unit in weight_to_kg
-    ):
-
+    if from_unit in weight_to_kg and to_unit in weight_to_kg:
         kilograms = value * weight_to_kg[from_unit]
-
         result = kilograms / weight_to_kg[to_unit]
 
-        return (
-            f"{value:g} {from_unit} = "
-            f"{result:.4f} {to_unit}"
-        )
+        return f"{value:g} {from_unit} = {result:.4f} {to_unit}"
 
     # --------------------------------------------------------
     # VOLUME
@@ -356,19 +326,11 @@ def unit_converter(
         "gal": 3.785411784
     }
 
-    if (
-        from_unit in volume_to_liter
-        and to_unit in volume_to_liter
-    ):
-
+    if from_unit in volume_to_liter and to_unit in volume_to_liter:
         liters = value * volume_to_liter[from_unit]
-
         result = liters / volume_to_liter[to_unit]
 
-        return (
-            f"{value:g} {from_unit} = "
-            f"{result:.4f} {to_unit}"
-        )
+        return f"{value:g} {from_unit} = {result:.4f} {to_unit}"
 
     # --------------------------------------------------------
     # TIME
@@ -381,19 +343,11 @@ def unit_converter(
         "day": 86400
     }
 
-    if (
-        from_unit in time_to_seconds
-        and to_unit in time_to_seconds
-    ):
-
+    if from_unit in time_to_seconds and to_unit in time_to_seconds:
         seconds = value * time_to_seconds[from_unit]
-
         result = seconds / time_to_seconds[to_unit]
 
-        return (
-            f"{value:g} {from_unit} = "
-            f"{result:.4f} {to_unit}"
-        )
+        return f"{value:g} {from_unit} = {result:.4f} {to_unit}"
 
     # --------------------------------------------------------
     # SPEED
@@ -405,19 +359,11 @@ def unit_converter(
         "mph": 1609.344 / 3600
     }
 
-    if (
-        from_unit in speed_to_mps
-        and to_unit in speed_to_mps
-    ):
-
+    if from_unit in speed_to_mps and to_unit in speed_to_mps:
         mps = value * speed_to_mps[from_unit]
-
         result = mps / speed_to_mps[to_unit]
 
-        return (
-            f"{value:g} {from_unit} = "
-            f"{result:.4f} {to_unit}"
-        )
+        return f"{value:g} {from_unit} = {result:.4f} {to_unit}"
 
     # --------------------------------------------------------
     # AREA
@@ -431,19 +377,11 @@ def unit_converter(
         "hectare": 10000
     }
 
-    if (
-        from_unit in area_to_m2
-        and to_unit in area_to_m2
-    ):
-
+    if from_unit in area_to_m2 and to_unit in area_to_m2:
         square_meters = value * area_to_m2[from_unit]
-
         result = square_meters / area_to_m2[to_unit]
 
-        return (
-            f"{value:g} {from_unit} = "
-            f"{result:.4f} {to_unit}"
-        )
+        return f"{value:g} {from_unit} = {result:.4f} {to_unit}"
 
     # --------------------------------------------------------
     # DATA
@@ -457,24 +395,15 @@ def unit_converter(
         "tb": 1024 ** 4
     }
 
-    if (
-        from_unit in data_to_bytes
-        and to_unit in data_to_bytes
-    ):
-
+    if from_unit in data_to_bytes and to_unit in data_to_bytes:
         bytes_value = value * data_to_bytes[from_unit]
-
         result = bytes_value / data_to_bytes[to_unit]
 
-        return (
-            f"{value:g} {from_unit} = "
-            f"{result:.4f} {to_unit}"
-        )
+        return f"{value:g} {from_unit} = {result:.4f} {to_unit}"
 
     return (
-        f"Sorry, conversion from "
-        f"{from_unit} to {to_unit} "
-        f"is not supported yet."
+        f"Sorry, conversion from {from_unit} "
+        f"to {to_unit} is not supported yet."
     )
 
 
@@ -496,6 +425,10 @@ tools = [
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
+if not GEMINI_API_KEY:
+    print("WARNING: GEMINI_API_KEY is not configured.")
+
+
 llm = ChatGoogleGenerativeAI(
     model="gemini-3.1-flash-lite-preview",
     google_api_key=GEMINI_API_KEY,
@@ -504,7 +437,7 @@ llm = ChatGoogleGenerativeAI(
 
 
 # ============================================================
-# 7. AGENT
+# 7. STUDENT AGENT
 # ============================================================
 
 student_agent = create_agent(
@@ -514,7 +447,6 @@ student_agent = create_agent(
     tools=tools,
 
     system_prompt="""
-
 You are a Student Utility Agent.
 
 You help students with:
@@ -522,21 +454,22 @@ You help students with:
 - Percentage
 - CGPA
 - Attendance
-- Unit conversion
+- Unit conversions
 
-Always use the appropriate tool for calculations.
+Use the appropriate tool for calculations.
 
-Give short and clear answers.
+Give short, clear and accurate answers.
 
-For unrelated questions, politely explain
-that you specialize in student utilities.
+For unrelated questions, politely explain that
+you specialize in student utility tasks.
 
+Do not invent calculation results.
 """
 )
 
 
 # ============================================================
-# 8. RESPONSE EXTRACTION
+# 8. EXTRACT AGENT RESPONSE
 # ============================================================
 
 def extract_text_response(agent_output):
@@ -544,18 +477,25 @@ def extract_text_response(agent_output):
     if not isinstance(agent_output, dict):
         return str(agent_output)
 
-    messages = agent_output.get("messages")
+    messages = agent_output.get("messages", [])
 
     if not messages:
         return str(agent_output)
 
-    last = messages[-1]
+    last_message = messages[-1]
 
-    content = getattr(last, "content", "")
+    content = getattr(
+        last_message,
+        "content",
+        ""
+    )
+
+    if isinstance(content, str):
+        return content.strip()
 
     if isinstance(content, list):
 
-        text_parts = []
+        parts = []
 
         for block in content:
 
@@ -566,23 +506,19 @@ def extract_text_response(agent_output):
                     text = block.get("text", "")
 
                     if text:
-                        text_parts.append(str(text))
+                        parts.append(text)
 
             elif isinstance(block, str):
 
-                text_parts.append(block)
+                parts.append(block)
 
-        if text_parts:
-            return "".join(text_parts).strip()
-
-    if isinstance(content, str):
-        return content.strip()
+        return "".join(parts).strip()
 
     return str(content)
 
 
 # ============================================================
-# 9. LANGSERVE
+# 9. LANGSERVE INPUT
 # ============================================================
 
 class AgentInput(BaseModel):
@@ -628,18 +564,13 @@ formatted_agent_chain = (
 # ============================================================
 
 app = FastAPI(
-
     title="Student Utility Agent",
-
-    description=(
-        "AI-powered Student Utility Agent"
-    )
-
+    description="AI-powered Student Utility Agent"
 )
 
 
 # ============================================================
-# 11. CHAT REQUEST
+# 11. CHAT REQUEST MODEL
 # ============================================================
 
 class ChatRequest(BaseModel):
@@ -648,7 +579,7 @@ class ChatRequest(BaseModel):
 
 
 # ============================================================
-# 12. CONVERSION DETECTOR
+# 12. DETECT CONVERSION
 # ============================================================
 
 def detect_conversion(text):
@@ -657,38 +588,34 @@ def detect_conversion(text):
 
     text = text.replace("?", "")
 
-    # --------------------------------------------
-    # Example:
+    # Normalize degree symbols
+    text = text.replace("°c", " celsius")
+    text = text.replace("°f", " fahrenheit")
+
+    # --------------------------------------------------------
     # 30 Celsius to Fahrenheit
     # 2 feet to centimeters
     # 5 km to miles
-    # --------------------------------------------
+    # --------------------------------------------------------
 
     match = re.search(
 
         r"(-?\d+(?:\.\d+)?)\s*"
         r"(?:degrees?\s+)?"
-        r"([a-zA-Z°²/ ]+?)"
+        r"([a-zA-Z²°/ ]+?)"
         r"\s+(?:to|into|in)\s+"
-        r"([a-zA-Z°²/ ]+)$",
+        r"([a-zA-Z²°/ ]+?)$",
 
         text
-
     )
 
     if match:
 
-        value = float(
-            match.group(1)
-        )
+        value = float(match.group(1))
 
-        from_unit = (
-            match.group(2).strip()
-        )
+        from_unit = match.group(2).strip()
 
-        to_unit = (
-            match.group(3).strip()
-        )
+        to_unit = match.group(3).strip()
 
         return (
             value,
@@ -696,36 +623,28 @@ def detect_conversion(text):
             to_unit
         )
 
-
-    # --------------------------------------------
-    # Example:
+    # --------------------------------------------------------
     # 2 feet is how many cm
-    # --------------------------------------------
+    # 5 kg is how many pounds
+    # --------------------------------------------------------
 
     match = re.search(
 
         r"(-?\d+(?:\.\d+)?)\s*"
-        r"([a-zA-Z°²/ ]+?)"
+        r"([a-zA-Z²°/ ]+?)"
         r"\s+(?:is|are)\s+how\s+many\s+"
-        r"([a-zA-Z°²/ ]+)$",
+        r"([a-zA-Z²°/ ]+?)$",
 
         text
-
     )
 
     if match:
 
-        value = float(
-            match.group(1)
-        )
+        value = float(match.group(1))
 
-        from_unit = (
-            match.group(2).strip()
-        )
+        from_unit = match.group(2).strip()
 
-        to_unit = (
-            match.group(3).strip()
-        )
+        to_unit = match.group(3).strip()
 
         return (
             value,
@@ -733,50 +652,41 @@ def detect_conversion(text):
             to_unit
         )
 
-
-    # --------------------------------------------
-    # Example:
+    # --------------------------------------------------------
     # how many cm is 2 feet
-    # --------------------------------------------
+    # how many pounds is 5 kg
+    # --------------------------------------------------------
 
     match = re.search(
 
         r"how\s+many\s+"
-        r"([a-zA-Z°²/ ]+?)"
+        r"([a-zA-Z²°/ ]+?)"
         r"\s+(?:is|are)\s+"
         r"(-?\d+(?:\.\d+)?)\s*"
-        r"([a-zA-Z°²/ ]+)$",
+        r"([a-zA-Z²°/ ]+?)$",
 
         text
-
     )
 
     if match:
 
-        to_unit = (
-            match.group(1).strip()
-        )
+        to_unit = match.group(1).strip()
 
-        value = float(
-            match.group(2)
-        )
+        value = float(match.group(2))
 
-        from_unit = (
-            match.group(3).strip()
-        )
+        from_unit = match.group(3).strip()
 
         return (
             value,
             from_unit,
             to_unit
         )
-
 
     return None
 
 
 # ============================================================
-# 13. CHAT API
+# 13. CHAT ENDPOINT
 # ============================================================
 
 @app.post("/chat")
@@ -790,10 +700,9 @@ def chat(request: ChatRequest):
             "response": "Please enter a question."
         }
 
-
-    # ========================================================
-    # DIRECT CONVERSION
-    # ========================================================
+    # --------------------------------------------------------
+    # DIRECT UNIT CONVERSION
+    # --------------------------------------------------------
 
     conversion = detect_conversion(
         user_message
@@ -823,14 +732,12 @@ def chat(request: ChatRequest):
 
             return {
                 "response":
-                    "Conversion error: "
-                    + str(e)
+                    f"Conversion error: {str(e)}"
             }
 
-
-    # ========================================================
+    # --------------------------------------------------------
     # AI AGENT
-    # ========================================================
+    # --------------------------------------------------------
 
     try:
 
@@ -857,13 +764,12 @@ def chat(request: ChatRequest):
 
         return {
             "response":
-                "Agent error: "
-                + str(e)
+                f"Agent error: {str(e)}"
         }
 
 
 # ============================================================
-# 14. ROOT WEB PAGE
+# 14. WEB UI
 # ============================================================
 
 @app.get(
@@ -873,7 +779,6 @@ def chat(request: ChatRequest):
 def home():
 
     return """
-
 <!DOCTYPE html>
 
 <html>
@@ -887,8 +792,9 @@ def home():
     content="width=device-width, initial-scale=1.0"
 >
 
-<title>Student Utility Agent</title>
-
+<title>
+Student Utility Agent
+</title>
 
 <style>
 
@@ -898,10 +804,12 @@ def home():
     padding: 0;
 }
 
-
 body {
 
-    font-family: Arial, Helvetica, sans-serif;
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
 
     min-height: 100vh;
 
@@ -919,9 +827,7 @@ body {
     align-items: center;
 
     padding: 20px;
-
 }
-
 
 .container {
 
@@ -937,10 +843,8 @@ body {
 
     box-shadow:
         0 12px 45px
-        rgba(0,0,0,0.12);
-
+        rgba(0, 0, 0, 0.12);
 }
-
 
 .header {
 
@@ -956,25 +860,19 @@ body {
     padding: 30px;
 
     text-align: center;
-
 }
-
 
 .header h1 {
 
     font-size: 30px;
 
     margin-bottom: 8px;
-
 }
-
 
 .header p {
 
     font-size: 15px;
-
 }
-
 
 .features {
 
@@ -990,9 +888,7 @@ body {
 
     border-bottom:
         1px solid #e5e7eb;
-
 }
-
 
 .feature {
 
@@ -1007,9 +903,7 @@ body {
     font-size: 13px;
 
     font-weight: bold;
-
 }
-
 
 .chat {
 
@@ -1018,9 +912,7 @@ body {
     overflow-y: auto;
 
     padding: 22px;
-
 }
-
 
 .message {
 
@@ -1039,9 +931,7 @@ body {
     white-space: pre-wrap;
 
     word-wrap: break-word;
-
 }
-
 
 .bot {
 
@@ -1050,9 +940,7 @@ body {
     color: #111827;
 
     margin-right: auto;
-
 }
-
 
 .user {
 
@@ -1061,9 +949,7 @@ body {
     color: white;
 
     margin-left: auto;
-
 }
-
 
 .input-area {
 
@@ -1075,9 +961,7 @@ body {
 
     border-top:
         1px solid #e5e7eb;
-
 }
-
 
 #message {
 
@@ -1093,16 +977,12 @@ body {
     outline: none;
 
     font-size: 15px;
-
 }
-
 
 #message:focus {
 
     border-color: #2563eb;
-
 }
-
 
 #send {
 
@@ -1121,25 +1001,19 @@ body {
     font-size: 15px;
 
     font-weight: bold;
-
 }
-
 
 #send:hover {
 
     background: #1d4ed8;
-
 }
-
 
 #send:disabled {
 
     background: #94a3b8;
 
     cursor: not-allowed;
-
 }
-
 
 .examples {
 
@@ -1149,9 +1023,7 @@ body {
     color: #64748b;
 
     font-size: 13px;
-
 }
-
 
 .status {
 
@@ -1162,11 +1034,9 @@ body {
     color: #94a3b8;
 
     font-size: 12px;
-
 }
 
-
-@media(max-width:600px) {
+@media (max-width: 600px) {
 
     body {
         padding: 10px;
@@ -1188,19 +1058,15 @@ body {
     #send {
         padding: 14px 18px;
     }
-
 }
 
 </style>
 
 </head>
 
-
 <body>
 
-
 <div class="container">
-
 
 <div class="header">
 
@@ -1263,6 +1129,8 @@ Try:
 
 "30 Celsius to Fahrenheit"
 
+"5 km to miles"
+
 "2 hours to minutes"
 
 "1 GB to MB"
@@ -1305,16 +1173,10 @@ Try:
 
 </div>
 
-
 </div>
 
 
 <script>
-
-
-// ============================================================
-// GET ELEMENTS
-// ============================================================
 
 const input =
     document.getElementById("message");
@@ -1326,28 +1188,20 @@ const chat =
     document.getElementById("chat");
 
 
-// ============================================================
-// SEND MESSAGE FUNCTION
-// ============================================================
-
 async function sendMessage() {
 
     const message =
         input.value.trim();
-
 
     if (!message) {
 
         input.focus();
 
         return;
-
     }
 
 
-    // ========================================================
-    // SHOW USER MESSAGE
-    // ========================================================
+    // USER MESSAGE
 
     const userMessage =
         document.createElement("div");
@@ -1363,13 +1217,7 @@ async function sendMessage() {
     );
 
 
-    // Clear input
     input.value = "";
-
-
-    // ========================================================
-    // DISABLE BUTTON
-    // ========================================================
 
     sendButton.disabled = true;
 
@@ -1377,9 +1225,7 @@ async function sendMessage() {
         "Thinking...";
 
 
-    // ========================================================
-    // LOADING MESSAGE
-    // ========================================================
+    // LOADING
 
     const loading =
         document.createElement("div");
@@ -1394,22 +1240,16 @@ async function sendMessage() {
         loading
     );
 
-
     chat.scrollTop =
         chat.scrollHeight;
 
 
     try {
 
-        // ====================================================
-        // REQUEST
-        // ====================================================
-
         const response =
             await fetch(
                 "/chat",
                 {
-
                     method: "POST",
 
                     headers: {
@@ -1420,16 +1260,11 @@ async function sendMessage() {
                     body: JSON.stringify({
                         message: message
                     })
-
                 }
             );
 
 
-        // ====================================================
-        // READ RESPONSE
-        // ====================================================
-
-        const text =
+        const responseText =
             await response.text();
 
 
@@ -1438,26 +1273,24 @@ async function sendMessage() {
 
         let data;
 
-
         try {
 
             data =
-                JSON.parse(text);
+                JSON.parse(
+                    responseText
+                );
 
-        }
-
-        catch {
+        } catch {
 
             data = {
-                response: text
+                response:
+                    responseText
             };
 
         }
 
 
-        // ====================================================
-        // RESPONSE MESSAGE
-        // ====================================================
+        // RESPONSE
 
         const botMessage =
             document.createElement("div");
@@ -1473,13 +1306,11 @@ async function sendMessage() {
                 (
                     data.detail ||
                     data.response ||
-                    text ||
+                    responseText ||
                     "Unknown server error."
                 );
 
-        }
-
-        else {
+        } else {
 
             botMessage.textContent =
                 data.response ||
@@ -1493,13 +1324,7 @@ async function sendMessage() {
         );
 
 
-    }
-
-    catch(error) {
-
-        // ====================================================
-        // NETWORK ERROR
-        // ====================================================
+    } catch (error) {
 
         loading.remove();
 
@@ -1512,8 +1337,9 @@ async function sendMessage() {
 
 
         errorMessage.textContent =
-            "⚠️ Server connection failed.\n\n" +
-            "Please wait a few seconds and try again.";
+            "⚠️ Unable to reach the server.\n\n" +
+            "Please check the Render service " +
+            "and try again.";
 
 
         chat.appendChild(
@@ -1522,35 +1348,25 @@ async function sendMessage() {
 
 
         console.error(
-            "Connection error:",
+            "Network error:",
             error
         );
-
     }
 
-
-    // ========================================================
-    // ENABLE BUTTON
-    // ========================================================
 
     sendButton.disabled = false;
 
     sendButton.textContent =
         "Send";
 
-
     input.focus();
-
 
     chat.scrollTop =
         chat.scrollHeight;
-
 }
 
 
-// ============================================================
-// BUTTON CLICK
-// ============================================================
+// BUTTON
 
 sendButton.addEventListener(
     "click",
@@ -1558,9 +1374,7 @@ sendButton.addEventListener(
 );
 
 
-// ============================================================
 // ENTER KEY
-// ============================================================
 
 input.addEventListener(
     "keydown",
@@ -1575,20 +1389,15 @@ input.addEventListener(
             event.preventDefault();
 
             sendMessage();
-
         }
-
     }
 );
 
-
 </script>
-
 
 </body>
 
 </html>
-
 """
 
 
@@ -1597,13 +1406,9 @@ input.addEventListener(
 # ============================================================
 
 add_routes(
-
     app,
-
     formatted_agent_chain,
-
     path="/agent"
-
 )
 
 
@@ -1621,11 +1426,7 @@ if __name__ == "__main__":
     )
 
     uvicorn.run(
-
         app,
-
         host="0.0.0.0",
-
         port=port
-
     )
