@@ -3,28 +3,38 @@ import re
 import uvicorn
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from langserve import add_routes
 
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableLambda
+
+# IMPORTANT: THIS IS THE CORRECT IMPORT
 from langchain_google_genai import ChatGoogleGenerativeAI
+
 from langchain.agents import create_agent
 
 from pydantic import BaseModel, Field
 
 
 # ============================================================
-# 1. PERCENTAGE TOOL
+# GEMINI API KEY
+# ============================================================
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
+
+# ============================================================
+# PERCENTAGE TOOL
 # ============================================================
 
 @tool
 def calculate_percentage(marks: float, total: float) -> str:
-    """Calculate percentage from obtained marks and total marks."""
+    """Calculate percentage."""
 
     if total <= 0:
-        return "Total marks must be greater than 0."
+        return "Total marks must be greater than zero."
 
     percentage = (marks / total) * 100
 
@@ -32,14 +42,15 @@ def calculate_percentage(marks: float, total: float) -> str:
 
 
 # ============================================================
-# 2. CGPA TOOL
+# CGPA TOOL
 # ============================================================
 
 @tool
 def calculate_cgpa(grades: str) -> str:
-    """Calculate average CGPA from comma-separated grade points."""
+    """Calculate average CGPA from grade points."""
 
     try:
+
         values = [
             float(x.strip())
             for x in grades.split(",")
@@ -47,26 +58,33 @@ def calculate_cgpa(grades: str) -> str:
         ]
 
         if not values:
-            return "Please provide your grade points."
+            return "Please provide grade points."
 
         cgpa = sum(values) / len(values)
 
         return f"Your CGPA is {cgpa:.2f}."
 
-    except ValueError:
-        return "Please provide grade points like 8.5, 9, 7.5, 8."
+    except Exception:
+
+        return (
+            "Please enter grade points like "
+            "8.5, 9, 7.5, 8."
+        )
 
 
 # ============================================================
-# 3. ATTENDANCE TOOL
+# ATTENDANCE TOOL
 # ============================================================
 
 @tool
-def calculate_attendance(attended: float, total: float) -> str:
+def calculate_attendance(
+    attended: float,
+    total: float
+) -> str:
     """Calculate attendance percentage."""
 
     if total <= 0:
-        return "Total classes must be greater than 0."
+        return "Total classes must be greater than zero."
 
     percentage = (attended / total) * 100
 
@@ -74,7 +92,7 @@ def calculate_attendance(attended: float, total: float) -> str:
 
 
 # ============================================================
-# 4. UNIT CONVERTER
+# UNIT CONVERTER TOOL
 # ============================================================
 
 @tool
@@ -83,13 +101,13 @@ def unit_converter(
     from_unit: str,
     to_unit: str
 ) -> str:
-    """Convert common length, weight, volume, temperature,
-    time, speed, area and digital storage units."""
+    """Convert common units."""
 
     from_unit = from_unit.lower().strip()
     to_unit = to_unit.lower().strip()
 
     aliases = {
+
         # LENGTH
         "millimeter": "mm",
         "millimeters": "mm",
@@ -195,7 +213,6 @@ def unit_converter(
         "km per hour": "km/h",
         "kmph": "km/h",
         "kph": "km/h",
-        "km/hr": "km/h",
 
         "mile per hour": "mph",
         "miles per hour": "mph",
@@ -205,13 +222,9 @@ def unit_converter(
         "square meters": "m2",
         "square metre": "m2",
         "square metres": "m2",
-        "sq meter": "m2",
-        "sq meters": "m2",
 
         "square kilometer": "km2",
         "square kilometers": "km2",
-        "square kilometre": "km2",
-        "square kilometres": "km2",
 
         "square foot": "ft2",
         "square feet": "ft2",
@@ -239,49 +252,69 @@ def unit_converter(
         "terabytes": "tb"
     }
 
-    from_unit = aliases.get(from_unit, from_unit)
-    to_unit = aliases.get(to_unit, to_unit)
+    from_unit = aliases.get(
+        from_unit,
+        from_unit
+    )
 
-    # --------------------------------------------------------
-    # SAME UNIT
-    # --------------------------------------------------------
+    to_unit = aliases.get(
+        to_unit,
+        to_unit
+    )
 
-    if from_unit == to_unit:
-        return f"{value:g} {from_unit} = {value:g} {to_unit}"
 
-    # --------------------------------------------------------
+    # ========================================================
     # TEMPERATURE
-    # --------------------------------------------------------
+    # ========================================================
 
     if from_unit == "c" and to_unit == "f":
+
         result = (value * 9 / 5) + 32
+
         return f"{value:g}°C = {result:.2f}°F"
 
+
     if from_unit == "f" and to_unit == "c":
+
         result = (value - 32) * 5 / 9
+
         return f"{value:g}°F = {result:.2f}°C"
 
+
     if from_unit == "c" and to_unit == "k":
+
         result = value + 273.15
+
         return f"{value:g}°C = {result:.2f} K"
 
+
     if from_unit == "k" and to_unit == "c":
+
         result = value - 273.15
+
         return f"{value:g} K = {result:.2f}°C"
 
+
     if from_unit == "f" and to_unit == "k":
+
         result = ((value - 32) * 5 / 9) + 273.15
+
         return f"{value:g}°F = {result:.2f} K"
 
+
     if from_unit == "k" and to_unit == "f":
+
         result = ((value - 273.15) * 9 / 5) + 32
+
         return f"{value:g} K = {result:.2f}°F"
 
-    # --------------------------------------------------------
-    # LENGTH
-    # --------------------------------------------------------
 
-    length_to_meter = {
+    # ========================================================
+    # LENGTH
+    # ========================================================
+
+    length = {
+
         "mm": 0.001,
         "cm": 0.01,
         "m": 1,
@@ -290,154 +323,210 @@ def unit_converter(
         "ft": 0.3048,
         "yd": 0.9144,
         "mi": 1609.344
+
     }
 
-    if from_unit in length_to_meter and to_unit in length_to_meter:
-        meters = value * length_to_meter[from_unit]
-        result = meters / length_to_meter[to_unit]
+    if from_unit in length and to_unit in length:
 
-        return f"{value:g} {from_unit} = {result:.4f} {to_unit}"
+        meters = value * length[from_unit]
 
-    # --------------------------------------------------------
+        result = meters / length[to_unit]
+
+        return (
+            f"{value:g} {from_unit} = "
+            f"{result:.4f} {to_unit}"
+        )
+
+
+    # ========================================================
     # WEIGHT
-    # --------------------------------------------------------
+    # ========================================================
 
-    weight_to_kg = {
+    weight = {
+
         "mg": 0.000001,
         "g": 0.001,
         "kg": 1,
         "oz": 0.0283495,
         "lb": 0.45359237
+
     }
 
-    if from_unit in weight_to_kg and to_unit in weight_to_kg:
-        kilograms = value * weight_to_kg[from_unit]
-        result = kilograms / weight_to_kg[to_unit]
+    if from_unit in weight and to_unit in weight:
 
-        return f"{value:g} {from_unit} = {result:.4f} {to_unit}"
+        kilograms = value * weight[from_unit]
 
-    # --------------------------------------------------------
+        result = kilograms / weight[to_unit]
+
+        return (
+            f"{value:g} {from_unit} = "
+            f"{result:.4f} {to_unit}"
+        )
+
+
+    # ========================================================
     # VOLUME
-    # --------------------------------------------------------
+    # ========================================================
 
-    volume_to_liter = {
+    volume = {
+
         "ml": 0.001,
         "l": 1,
         "gal": 3.785411784
+
     }
 
-    if from_unit in volume_to_liter and to_unit in volume_to_liter:
-        liters = value * volume_to_liter[from_unit]
-        result = liters / volume_to_liter[to_unit]
+    if from_unit in volume and to_unit in volume:
 
-        return f"{value:g} {from_unit} = {result:.4f} {to_unit}"
+        liters = value * volume[from_unit]
 
-    # --------------------------------------------------------
+        result = liters / volume[to_unit]
+
+        return (
+            f"{value:g} {from_unit} = "
+            f"{result:.4f} {to_unit}"
+        )
+
+
+    # ========================================================
     # TIME
-    # --------------------------------------------------------
+    # ========================================================
 
-    time_to_seconds = {
+    time_units = {
+
         "s": 1,
         "min": 60,
         "h": 3600,
         "day": 86400
+
     }
 
-    if from_unit in time_to_seconds and to_unit in time_to_seconds:
-        seconds = value * time_to_seconds[from_unit]
-        result = seconds / time_to_seconds[to_unit]
+    if from_unit in time_units and to_unit in time_units:
 
-        return f"{value:g} {from_unit} = {result:.4f} {to_unit}"
+        seconds = value * time_units[from_unit]
 
-    # --------------------------------------------------------
+        result = seconds / time_units[to_unit]
+
+        return (
+            f"{value:g} {from_unit} = "
+            f"{result:.4f} {to_unit}"
+        )
+
+
+    # ========================================================
     # SPEED
-    # --------------------------------------------------------
+    # ========================================================
 
-    speed_to_mps = {
+    speed = {
+
         "m/s": 1,
         "km/h": 1000 / 3600,
         "mph": 1609.344 / 3600
+
     }
 
-    if from_unit in speed_to_mps and to_unit in speed_to_mps:
-        mps = value * speed_to_mps[from_unit]
-        result = mps / speed_to_mps[to_unit]
+    if from_unit in speed and to_unit in speed:
 
-        return f"{value:g} {from_unit} = {result:.4f} {to_unit}"
+        mps = value * speed[from_unit]
 
-    # --------------------------------------------------------
+        result = mps / speed[to_unit]
+
+        return (
+            f"{value:g} {from_unit} = "
+            f"{result:.4f} {to_unit}"
+        )
+
+
+    # ========================================================
     # AREA
-    # --------------------------------------------------------
+    # ========================================================
 
-    area_to_m2 = {
+    area = {
+
         "m2": 1,
         "km2": 1000000,
         "ft2": 0.09290304,
         "acre": 4046.8564224,
         "hectare": 10000
+
     }
 
-    if from_unit in area_to_m2 and to_unit in area_to_m2:
-        square_meters = value * area_to_m2[from_unit]
-        result = square_meters / area_to_m2[to_unit]
+    if from_unit in area and to_unit in area:
 
-        return f"{value:g} {from_unit} = {result:.4f} {to_unit}"
+        square_meters = value * area[from_unit]
 
-    # --------------------------------------------------------
-    # DATA
-    # --------------------------------------------------------
+        result = square_meters / area[to_unit]
 
-    data_to_bytes = {
+        return (
+            f"{value:g} {from_unit} = "
+            f"{result:.4f} {to_unit}"
+        )
+
+
+    # ========================================================
+    # DIGITAL STORAGE
+    # ========================================================
+
+    data = {
+
         "byte": 1,
         "kb": 1024,
         "mb": 1024 ** 2,
         "gb": 1024 ** 3,
         "tb": 1024 ** 4
+
     }
 
-    if from_unit in data_to_bytes and to_unit in data_to_bytes:
-        bytes_value = value * data_to_bytes[from_unit]
-        result = bytes_value / data_to_bytes[to_unit]
+    if from_unit in data and to_unit in data:
 
-        return f"{value:g} {from_unit} = {result:.4f} {to_unit}"
+        bytes_value = value * data[from_unit]
+
+        result = bytes_value / data[to_unit]
+
+        return (
+            f"{value:g} {from_unit} = "
+            f"{result:.4f} {to_unit}"
+        )
+
 
     return (
-        f"Sorry, conversion from {from_unit} "
-        f"to {to_unit} is not supported yet."
+        f"Sorry, conversion from "
+        f"{from_unit} to {to_unit} "
+        f"is not supported yet."
     )
 
 
 # ============================================================
-# 5. TOOLS
+# TOOLS
 # ============================================================
 
 tools = [
+
     calculate_percentage,
     calculate_cgpa,
     calculate_attendance,
     unit_converter
+
 ]
 
 
 # ============================================================
-# 6. GEMINI
+# GEMINI MODEL
 # ============================================================
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-
-if not GEMINI_API_KEY:
-    print("WARNING: GEMINI_API_KEY is not configured.")
-
-
 llm = ChatGoogleGenerativeAI(
+
     model="gemini-3.1-flash-lite-preview",
+
     google_api_key=GEMINI_API_KEY,
+
     temperature=0
+
 )
 
 
 # ============================================================
-# 7. STUDENT AGENT
+# AGENT
 # ============================================================
 
 student_agent = create_agent(
@@ -447,40 +536,57 @@ student_agent = create_agent(
     tools=tools,
 
     system_prompt="""
+
 You are a Student Utility Agent.
 
 You help students with:
 
-- Percentage
-- CGPA
-- Attendance
-- Unit conversions
+1. Percentage
+2. CGPA
+3. Attendance
+4. Unit conversions
 
-Use the appropriate tool for calculations.
+Use the correct tool for calculations.
 
-Give short, clear and accurate answers.
+Give simple and clear answers.
 
-For unrelated questions, politely explain that
-you specialize in student utility tasks.
+For percentage:
+percentage = obtained marks / total marks × 100
 
-Do not invent calculation results.
+For attendance:
+attendance = attended classes / total classes × 100
+
+For CGPA:
+calculate the average of the supplied grade points.
+
+Do not invent numerical results.
+
 """
+
 )
 
 
 # ============================================================
-# 8. EXTRACT AGENT RESPONSE
+# EXTRACT AGENT RESPONSE
 # ============================================================
 
-def extract_text_response(agent_output):
+def extract_text_response(result):
 
-    if not isinstance(agent_output, dict):
-        return str(agent_output)
+    if not isinstance(result, dict):
 
-    messages = agent_output.get("messages", [])
+        return str(result)
+
+
+    messages = result.get(
+        "messages",
+        []
+    )
+
 
     if not messages:
-        return str(agent_output)
+
+        return str(result)
+
 
     last_message = messages[-1]
 
@@ -490,62 +596,106 @@ def extract_text_response(agent_output):
         ""
     )
 
-    if isinstance(content, str):
+
+    if isinstance(
+        content,
+        str
+    ):
+
         return content.strip()
 
-    if isinstance(content, list):
+
+    if isinstance(
+        content,
+        list
+    ):
 
         parts = []
 
-        for block in content:
 
-            if isinstance(block, dict):
+        for item in content:
 
-                if block.get("type") == "text":
+            if isinstance(
+                item,
+                dict
+            ):
 
-                    text = block.get("text", "")
+                if item.get(
+                    "type"
+                ) == "text":
+
+                    text = item.get(
+                        "text",
+                        ""
+                    )
 
                     if text:
-                        parts.append(text)
 
-            elif isinstance(block, str):
+                        parts.append(
+                            text
+                        )
 
-                parts.append(block)
+            elif isinstance(
+                item,
+                str
+            ):
 
-        return "".join(parts).strip()
+                parts.append(item)
+
+
+        return "".join(
+            parts
+        ).strip()
+
 
     return str(content)
 
 
 # ============================================================
-# 9. LANGSERVE INPUT
+# LANGSERVE
 # ============================================================
 
 class AgentInput(BaseModel):
 
     input: str = Field(
-        description="Your message to the agent"
+        description="Message for the agent"
     )
 
 
 def format_for_agent(x):
 
     user_input = (
+
         x["input"]
-        if isinstance(x, dict)
+
+        if isinstance(
+            x,
+            dict
+        )
+
         else x.input
+
     )
 
     return {
+
         "messages": [
-            ("user", user_input)
+
+            (
+                "user",
+                user_input
+            )
+
         ]
+
     }
 
 
 formatted_agent_chain = (
 
-    RunnableLambda(format_for_agent)
+    RunnableLambda(
+        format_for_agent
+    )
 
     | student_agent
 
@@ -554,23 +704,32 @@ formatted_agent_chain = (
     )
 
 ).with_types(
+
     input_type=AgentInput,
+
     output_type=str
+
 )
 
 
 # ============================================================
-# 10. FASTAPI
+# FASTAPI
 # ============================================================
 
 app = FastAPI(
+
     title="Student Utility Agent",
-    description="AI-powered Student Utility Agent"
+
+    description=(
+        "Student Utility Agent powered by "
+        "Gemini and LangChain"
+    )
+
 )
 
 
 # ============================================================
-# 11. CHAT REQUEST MODEL
+# CHAT REQUEST
 # ============================================================
 
 class ChatRequest(BaseModel):
@@ -579,18 +738,18 @@ class ChatRequest(BaseModel):
 
 
 # ============================================================
-# 12. DETECT CONVERSION
+# CONVERSION DETECTOR
 # ============================================================
 
 def detect_conversion(text):
 
     text = text.lower().strip()
 
-    text = text.replace("?", "")
+    text = text.replace(
+        "?",
+        ""
+    )
 
-    # Normalize degree symbols
-    text = text.replace("°c", " celsius")
-    text = text.replace("°f", " fahrenheit")
 
     # --------------------------------------------------------
     # 30 Celsius to Fahrenheit
@@ -602,119 +761,131 @@ def detect_conversion(text):
 
         r"(-?\d+(?:\.\d+)?)\s*"
         r"(?:degrees?\s+)?"
-        r"([a-zA-Z²°/ ]+?)"
+        r"([a-zA-Z°²/ ]+?)"
         r"\s+(?:to|into|in)\s+"
-        r"([a-zA-Z²°/ ]+?)$",
+        r"([a-zA-Z°²/ ]+?)$",
 
         text
+
     )
+
 
     if match:
 
-        value = float(match.group(1))
-
-        from_unit = match.group(2).strip()
-
-        to_unit = match.group(3).strip()
-
         return (
-            value,
-            from_unit,
-            to_unit
+
+            float(match.group(1)),
+
+            match.group(2).strip(),
+
+            match.group(3).strip()
+
         )
+
 
     # --------------------------------------------------------
     # 2 feet is how many cm
-    # 5 kg is how many pounds
     # --------------------------------------------------------
 
     match = re.search(
 
         r"(-?\d+(?:\.\d+)?)\s*"
-        r"([a-zA-Z²°/ ]+?)"
+        r"([a-zA-Z°²/ ]+?)"
         r"\s+(?:is|are)\s+how\s+many\s+"
-        r"([a-zA-Z²°/ ]+?)$",
+        r"([a-zA-Z°²/ ]+?)$",
 
         text
+
     )
+
 
     if match:
 
-        value = float(match.group(1))
-
-        from_unit = match.group(2).strip()
-
-        to_unit = match.group(3).strip()
-
         return (
-            value,
-            from_unit,
-            to_unit
+
+            float(match.group(1)),
+
+            match.group(2).strip(),
+
+            match.group(3).strip()
+
         )
+
 
     # --------------------------------------------------------
     # how many cm is 2 feet
-    # how many pounds is 5 kg
     # --------------------------------------------------------
 
     match = re.search(
 
         r"how\s+many\s+"
-        r"([a-zA-Z²°/ ]+?)"
+        r"([a-zA-Z°²/ ]+?)"
         r"\s+(?:is|are)\s+"
         r"(-?\d+(?:\.\d+)?)\s*"
-        r"([a-zA-Z²°/ ]+?)$",
+        r"([a-zA-Z°²/ ]+?)$",
 
         text
+
     )
+
 
     if match:
 
-        to_unit = match.group(1).strip()
-
-        value = float(match.group(2))
-
-        from_unit = match.group(3).strip()
-
         return (
-            value,
-            from_unit,
-            to_unit
+
+            float(match.group(2)),
+
+            match.group(3).strip(),
+
+            match.group(1).strip()
+
         )
+
 
     return None
 
 
 # ============================================================
-# 13. CHAT ENDPOINT
+# CHAT API
 # ============================================================
 
 @app.post("/chat")
 def chat(request: ChatRequest):
 
-    user_message = request.message.strip()
+    message = request.message.strip()
 
-    if not user_message:
 
-        return {
-            "response": "Please enter a question."
-        }
+    if not message:
 
-    # --------------------------------------------------------
-    # DIRECT UNIT CONVERSION
-    # --------------------------------------------------------
+        return JSONResponse(
+
+            content={
+                "response":
+                    "Please enter a question."
+            },
+
+            status_code=400
+
+        )
+
+
+    # ========================================================
+    # DIRECT CONVERSION
+    # ========================================================
 
     conversion = detect_conversion(
-        user_message
+        message
     )
+
 
     if conversion:
 
         value, from_unit, to_unit = conversion
 
+
         try:
 
-            result = unit_converter.invoke({
+            answer = unit_converter.invoke({
 
                 "value": value,
 
@@ -724,52 +895,85 @@ def chat(request: ChatRequest):
 
             })
 
+
             return {
-                "response": result
+                "response": answer
             }
+
 
         except Exception as e:
 
-            return {
-                "response":
-                    f"Conversion error: {str(e)}"
-            }
+            return JSONResponse(
 
-    # --------------------------------------------------------
+                content={
+                    "response":
+                        f"Conversion error: {str(e)}"
+                },
+
+                status_code=500
+
+            )
+
+
+    # ========================================================
     # AI AGENT
-    # --------------------------------------------------------
+    # ========================================================
 
     try:
 
         result = student_agent.invoke({
 
             "messages": [
+
                 (
                     "user",
-                    user_message
+                    message
                 )
+
             ]
 
         })
+
 
         answer = extract_text_response(
             result
         )
 
+
         return {
             "response": answer
         }
 
+
     except Exception as e:
 
-        return {
-            "response":
-                f"Agent error: {str(e)}"
-        }
+        return JSONResponse(
+
+            content={
+                "response":
+                    f"Agent error: {str(e)}"
+            },
+
+            status_code=500
+
+        )
 
 
 # ============================================================
-# 14. WEB UI
+# HEALTH CHECK
+# ============================================================
+
+@app.get("/health")
+def health():
+
+    return {
+        "status": "ok",
+        "message": "Student Utility Agent is running"
+    }
+
+
+# ============================================================
+# WEB APPLICATION
 # ============================================================
 
 @app.get(
@@ -779,6 +983,7 @@ def chat(request: ChatRequest):
 def home():
 
     return """
+
 <!DOCTYPE html>
 
 <html>
@@ -796,15 +1001,17 @@ def home():
 Student Utility Agent
 </title>
 
+
 <style>
 
 * {
     box-sizing: border-box;
-    margin: 0;
-    padding: 0;
 }
 
+
 body {
+
+    margin: 0;
 
     font-family:
         Arial,
@@ -827,7 +1034,9 @@ body {
     align-items: center;
 
     padding: 20px;
+
 }
+
 
 .container {
 
@@ -842,9 +1051,11 @@ body {
     overflow: hidden;
 
     box-shadow:
-        0 12px 45px
-        rgba(0, 0, 0, 0.12);
+        0 15px 45px
+        rgba(0,0,0,0.12);
+
 }
+
 
 .header {
 
@@ -860,19 +1071,27 @@ body {
     padding: 30px;
 
     text-align: center;
+
 }
+
 
 .header h1 {
 
+    margin: 0 0 8px 0;
+
     font-size: 30px;
 
-    margin-bottom: 8px;
 }
+
 
 .header p {
 
+    margin: 0;
+
     font-size: 15px;
+
 }
+
 
 .features {
 
@@ -888,22 +1107,27 @@ body {
 
     border-bottom:
         1px solid #e5e7eb;
+
 }
 
+
 .feature {
+
+    padding:
+        8px 14px;
+
+    border-radius: 20px;
 
     background: #eef2ff;
 
     color: #3730a3;
 
-    padding: 8px 14px;
-
-    border-radius: 20px;
-
     font-size: 13px;
 
     font-weight: bold;
+
 }
+
 
 .chat {
 
@@ -912,26 +1136,31 @@ body {
     overflow-y: auto;
 
     padding: 22px;
+
 }
+
 
 .message {
 
     max-width: 80%;
 
-    padding: 14px 17px;
+    padding:
+        14px 17px;
 
     margin-bottom: 16px;
 
     border-radius: 15px;
 
-    line-height: 1.55;
-
     font-size: 15px;
+
+    line-height: 1.55;
 
     white-space: pre-wrap;
 
-    word-wrap: break-word;
+    word-break: break-word;
+
 }
+
 
 .bot {
 
@@ -940,7 +1169,9 @@ body {
     color: #111827;
 
     margin-right: auto;
+
 }
+
 
 .user {
 
@@ -949,7 +1180,9 @@ body {
     color: white;
 
     margin-left: auto;
+
 }
+
 
 .input-area {
 
@@ -961,13 +1194,18 @@ body {
 
     border-top:
         1px solid #e5e7eb;
+
 }
+
 
 #message {
 
     flex: 1;
 
-    padding: 14px 16px;
+    min-width: 0;
+
+    padding:
+        14px 16px;
 
     border:
         1px solid #d1d5db;
@@ -977,43 +1215,54 @@ body {
     outline: none;
 
     font-size: 15px;
+
 }
+
 
 #message:focus {
 
     border-color: #2563eb;
+
 }
+
 
 #send {
 
-    padding: 14px 25px;
-
-    background: #2563eb;
-
-    color: white;
+    padding:
+        14px 25px;
 
     border: none;
 
     border-radius: 12px;
 
-    cursor: pointer;
+    background: #2563eb;
+
+    color: white;
 
     font-size: 15px;
 
     font-weight: bold;
+
+    cursor: pointer;
+
 }
+
 
 #send:hover {
 
     background: #1d4ed8;
+
 }
+
 
 #send:disabled {
 
     background: #94a3b8;
 
-    cursor: not-allowed;
+    cursor: wait;
+
 }
+
 
 .examples {
 
@@ -1023,50 +1272,83 @@ body {
     color: #64748b;
 
     font-size: 13px;
+
 }
+
 
 .status {
 
     text-align: center;
 
-    padding-bottom: 18px;
-
     color: #94a3b8;
 
     font-size: 12px;
+
+    padding-bottom: 18px;
+
 }
 
-@media (max-width: 600px) {
+
+@media(max-width:600px) {
 
     body {
+
         padding: 10px;
+
     }
+
+
+    .container {
+
+        border-radius: 15px;
+
+    }
+
 
     .header h1 {
+
         font-size: 24px;
+
     }
+
 
     .chat {
-        height: 380px;
+
+        height: 400px;
+
         padding: 15px;
+
     }
+
 
     .message {
+
         max-width: 90%;
+
     }
 
+
     #send {
-        padding: 14px 18px;
+
+        padding:
+            14px 18px;
+
     }
+
 }
 
 </style>
 
 </head>
 
+
 <body>
 
+
 <div class="container">
+
+
+<!-- HEADER -->
 
 <div class="header">
 
@@ -1075,12 +1357,13 @@ body {
     </h1>
 
     <p>
-        Your AI assistant for everyday
-        student calculations
+        Your AI assistant for student calculations
     </p>
 
 </div>
 
+
+<!-- FEATURES -->
 
 <div class="features">
 
@@ -1103,9 +1386,11 @@ body {
 </div>
 
 
+<!-- CHAT -->
+
 <div
-    class="chat"
     id="chat"
+    class="chat"
 >
 
     <div class="message bot">
@@ -1121,24 +1406,26 @@ I can help you with:
 
 Try:
 
-"435 out of 500 percentage"
+435 out of 500 percentage
 
-"42 out of 50 attendance"
+42 out of 50 attendance
 
-"2 feet to centimeters"
+2 feet to centimeters
 
-"30 Celsius to Fahrenheit"
+30 Celsius to Fahrenheit
 
-"5 km to miles"
+5 km to miles
 
-"2 hours to minutes"
+2 hours to minutes
 
-"1 GB to MB"
+1 GB to MB
 
     </div>
 
 </div>
 
+
+<!-- INPUT -->
 
 <div class="input-area">
 
@@ -1161,272 +1448,355 @@ Try:
 
 <div class="examples">
 
-    Try:
-    "30 Celsius to Fahrenheit"
+Try:
+"30 Celsius to Fahrenheit"
 
 </div>
 
 
 <div class="status">
 
-    Powered by Gemini + LangChain
+Powered by Gemini + LangChain
 
 </div>
+
 
 </div>
 
 
 <script>
 
-const input =
-    document.getElementById("message");
 
-const sendButton =
-    document.getElementById("send");
+// ============================================================
+// WAIT UNTIL PAGE IS LOADED
+// ============================================================
 
-const chat =
-    document.getElementById("chat");
-
-
-async function sendMessage() {
-
-    const message =
-        input.value.trim();
-
-    if (!message) {
-
-        input.focus();
-
-        return;
-    }
+window.addEventListener(
+    "DOMContentLoaded",
+    function() {
 
 
-    // USER MESSAGE
+        // ----------------------------------------------------
+        // GET ELEMENTS
+        // ----------------------------------------------------
 
-    const userMessage =
-        document.createElement("div");
-
-    userMessage.className =
-        "message user";
-
-    userMessage.textContent =
-        message;
-
-    chat.appendChild(
-        userMessage
-    );
-
-
-    input.value = "";
-
-    sendButton.disabled = true;
-
-    sendButton.textContent =
-        "Thinking...";
-
-
-    // LOADING
-
-    const loading =
-        document.createElement("div");
-
-    loading.className =
-        "message bot";
-
-    loading.textContent =
-        "🤔 Thinking...";
-
-    chat.appendChild(
-        loading
-    );
-
-    chat.scrollTop =
-        chat.scrollHeight;
-
-
-    try {
-
-        const response =
-            await fetch(
-                "/chat",
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body: JSON.stringify({
-                        message: message
-                    })
-                }
+        const input =
+            document.getElementById(
+                "message"
             );
 
 
-        const responseText =
-            await response.text();
+        const button =
+            document.getElementById(
+                "send"
+            );
 
 
-        loading.remove();
+        const chat =
+            document.getElementById(
+                "chat"
+            );
 
 
-        let data;
+        // ----------------------------------------------------
+        // SEND FUNCTION
+        // ----------------------------------------------------
 
-        try {
+        async function sendMessage() {
 
-            data =
-                JSON.parse(
-                    responseText
+
+            const message =
+                input.value.trim();
+
+
+            // Nothing entered
+            if (!message) {
+
+                input.focus();
+
+                return;
+
+            }
+
+
+            // ------------------------------------------------
+            // USER MESSAGE
+            // ------------------------------------------------
+
+            const userBubble =
+                document.createElement(
+                    "div"
                 );
 
-        } catch {
 
-            data = {
-                response:
-                    responseText
-            };
-
-        }
+            userBubble.className =
+                "message user";
 
 
-        // RESPONSE
-
-        const botMessage =
-            document.createElement("div");
-
-        botMessage.className =
-            "message bot";
+            userBubble.textContent =
+                message;
 
 
-        if (!response.ok) {
+            chat.appendChild(
+                userBubble
+            );
 
-            botMessage.textContent =
-                "❌ Server Error\n\n" +
-                (
-                    data.detail ||
+
+            // Clear input
+            input.value = "";
+
+
+            // ------------------------------------------------
+            // BUTTON
+            // ------------------------------------------------
+
+            button.disabled = true;
+
+            button.textContent =
+                "Thinking...";
+
+
+            // ------------------------------------------------
+            // LOADING
+            // ------------------------------------------------
+
+            const loading =
+                document.createElement(
+                    "div"
+                );
+
+
+            loading.className =
+                "message bot";
+
+
+            loading.textContent =
+                "🤔 Thinking...";
+
+
+            chat.appendChild(
+                loading
+            );
+
+
+            chat.scrollTop =
+                chat.scrollHeight;
+
+
+            try {
+
+
+                // ============================================
+                // CALL BACKEND
+                // ============================================
+
+                const response =
+                    await fetch(
+                        "/chat",
+                        {
+
+                            method: "POST",
+
+                            headers: {
+
+                                "Content-Type":
+                                    "application/json",
+
+                                "Accept":
+                                    "application/json"
+
+                            },
+
+                            body:
+                                JSON.stringify({
+
+                                    message:
+                                        message
+
+                                })
+
+                        }
+                    );
+
+
+                // ============================================
+                // READ RESPONSE
+                // ============================================
+
+                const data =
+                    await response.json();
+
+
+                loading.remove();
+
+
+                // ============================================
+                // BOT RESPONSE
+                // ============================================
+
+                const botBubble =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                botBubble.className =
+                    "message bot";
+
+
+                botBubble.textContent =
                     data.response ||
-                    responseText ||
-                    "Unknown server error."
+                    "No response received.";
+
+
+                chat.appendChild(
+                    botBubble
                 );
 
-        } else {
 
-            botMessage.textContent =
-                data.response ||
-                "No response received.";
+            }
+
+
+            catch(error) {
+
+
+                // ==========================================
+                // ERROR
+                // ==========================================
+
+                loading.remove();
+
+
+                const errorBubble =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                errorBubble.className =
+                    "message bot";
+
+
+                errorBubble.textContent =
+                    "❌ Unable to contact the server.\n\n" +
+                    "Please refresh the page and try again.";
+
+
+                chat.appendChild(
+                    errorBubble
+                );
+
+
+                console.error(
+                    "Chat error:",
+                    error
+                );
+
+            }
+
+
+            // ------------------------------------------------
+            // RESET BUTTON
+            // ------------------------------------------------
+
+            button.disabled = false;
+
+            button.textContent =
+                "Send";
+
+
+            input.focus();
+
+
+            chat.scrollTop =
+                chat.scrollHeight;
 
         }
 
 
-        chat.appendChild(
-            botMessage
+        // ----------------------------------------------------
+        // BUTTON CLICK
+        // ----------------------------------------------------
+
+        button.onclick =
+            sendMessage;
+
+
+        // ----------------------------------------------------
+        // ENTER KEY
+        // ----------------------------------------------------
+
+        input.addEventListener(
+
+            "keydown",
+
+            function(event) {
+
+                if (
+                    event.key === "Enter"
+                ) {
+
+                    event.preventDefault();
+
+                    sendMessage();
+
+                }
+
+            }
+
         );
 
 
-    } catch (error) {
-
-        loading.remove();
-
-
-        const errorMessage =
-            document.createElement("div");
-
-        errorMessage.className =
-            "message bot";
-
-
-        errorMessage.textContent =
-            "⚠️ Unable to reach the server.\n\n" +
-            "Please check the Render service " +
-            "and try again.";
-
-
-        chat.appendChild(
-            errorMessage
-        );
-
-
-        console.error(
-            "Network error:",
-            error
-        );
     }
 
-
-    sendButton.disabled = false;
-
-    sendButton.textContent =
-        "Send";
-
-    input.focus();
-
-    chat.scrollTop =
-        chat.scrollHeight;
-}
-
-
-// BUTTON
-
-sendButton.addEventListener(
-    "click",
-    sendMessage
-);
-
-
-// ENTER KEY
-
-input.addEventListener(
-    "keydown",
-    function(event) {
-
-        if (
-            event.key === "Enter"
-            &&
-            !event.shiftKey
-        ) {
-
-            event.preventDefault();
-
-            sendMessage();
-        }
-    }
 );
 
 </script>
 
+
 </body>
 
 </html>
+
 """
 
 
 # ============================================================
-# 15. LANGSERVE ROUTES
+# LANGSERVE ROUTE
 # ============================================================
 
 add_routes(
+
     app,
+
     formatted_agent_chain,
+
     path="/agent"
+
 )
 
 
 # ============================================================
-# 16. START SERVER
+# START SERVER
 # ============================================================
 
 if __name__ == "__main__":
 
     port = int(
+
         os.environ.get(
             "PORT",
             8000
         )
+
     )
 
     uvicorn.run(
+
         app,
+
         host="0.0.0.0",
+
         port=port
+
     )
